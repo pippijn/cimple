@@ -1,0 +1,268 @@
+#!/usr/bin/env perl
+
+use common::sense;
+
+my $ast = require $ARGV[0];
+
+sub deref {
+   ref $_[0] ? $_[0]->[0] : $_[0]
+}
+
+sub demangle {
+   $_[0] =~ s/_$//;
+   $_[0]
+}
+
+sub mangle {
+   $_[0] =~ /_$/ ? $_[0] : "$_[0]_"
+}
+
+my %reserved = map { $_ => 1 } qw(
+	auto void register for case switch short while return continue
+   int unsigned static union struct double do float extern char default
+   break if typedef long goto const signed volatile else
+);
+
+for my $type (keys %$ast) {
+   for my $i (0 .. $#{ $ast->{$type} }) {
+      $ast->{$type} = [map { deref $_ } @{ $ast->{$type} }];
+      if ($reserved{$ast->{$type}[$i]}) {
+         $ast->{$type}[$i] .= "_";
+      }
+   }
+
+   if ($reserved{$type}) {
+      $ast->{"${type}_"} = $ast->{$type};
+      delete $ast->{$type};
+   }
+}
+
+if ($ARGV[1] eq '-h') {
+   open my $hdr, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $hdr "namespace ast {\n";
+   for my $type (keys %$ast) {
+      my $args = join ", ", map { "node_ptr $_" } @{ $ast->{$type} };
+      my $get = join ";\n   ", map { "node_ptr const &$_ () const" } @{ $ast->{$type} };
+      my $set = join ";\n   ", map { "void $_ (node_ptr const &n)" } @{ $ast->{$type} };
+
+      print $hdr <<EOF;
+struct $type
+  : generic_node
+{
+   virtual node_ptr accept (visitor &v);
+   virtual node_kind kind () const;
+
+   $type (location const &loc = location::generated);
+   $type (location const &loc, $args);
+   ~$type ();
+
+   $get;
+   $set;
+
+private:
+   using generic_node::operator[];
+   using generic_node::children;
+};
+
+typedef boost::intrusive_ptr<$type> ${type}_ptr;
+
+EOF
+   }
+   print $hdr "}\n";
+}
+if ($ARGV[1] eq '-c') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "#include \"node.h\"\n";
+   print $src "#include \"visitor.h\"\n";
+   print $src "#include \"ast.h\"\n";
+   print $src "using namespace ast;\n";
+   for my $type (keys %$ast) {
+      my $member_count = @{ $ast->{$type} };
+      my $args = join ", ", map { "node_ptr $_" } @{ $ast->{$type} };
+      my $i = 0;
+      my $get = join "\n", map { "node_ptr const &${type}::$_ () const { return (*this)[" . $i++ . "]; }" } @{ $ast->{$type} };
+      $i = 0;
+      my $set = join "\n", map { "void ${type}::$_ (node_ptr const &n) { (*this)[" . $i++ . "] = n; }" } @{ $ast->{$type} };
+      my $add_nodes = join ";\n  ", map { "push ($_)" } @{ $ast->{$type} };
+      my $KIND = uc $type;
+
+      print $src <<EOF;
+node_ptr ${type}::accept (visitor &v) { return v.visit (*this); }
+node_kind ${type}::kind () const { return NODE_$KIND; }
+
+${type}::$type (location const &loc)
+  : generic_node (loc, $member_count)
+{
+  children.resize ($member_count);
+}
+
+${type}::$type (location const &loc, $args)
+  : generic_node (loc, $member_count)
+{
+  $add_nodes;
+}
+
+$get
+$set
+
+${type}::~$type () { }
+EOF
+   }
+}
+if ($ARGV[1] eq '-kh') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   for my $type (keys %$ast) {
+      my $KIND = uc $type;
+
+      print $src <<EOF;
+NODE_$KIND,
+EOF
+   }
+}
+if ($ARGV[1] eq '-kc') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "#include \"node.h\"\n";
+   print $src "char const *node_kind_name (node_kind kind) {\n";
+   print $src "  switch (kind) {\n";
+   for my $type (keys %$ast) {
+      my $KIND = uc $type;
+
+      print $src <<EOF;
+    case NODE_$KIND: return "$type";
+EOF
+   }
+   print $src "  case NODE_TOKEN: return \"token\";\n";
+   print $src "  case NODE_AMBIGUITY: return \"ambiguity\";\n";
+   print $src "  }\n";
+   print $src "  return \"<invalid>\";\n";
+   print $src "}\n";
+}
+if ($ARGV[1] eq '-vh') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   for my $type (keys %$ast) {
+      print $src "virtual node_ptr visit ($type &n) PURE;\n";
+   }
+}
+if ($ARGV[1] eq '-vc') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "#include \"traverser.h\"\n";
+   print $src "#include \"node.h\"\n";
+   print $src "#include \"ast.h\"\n";
+   print $src "using namespace ast;\n";
+   for my $type (keys %$ast) {
+      print $src "node_ptr traverser::visit ($type &n) { return visit (static_cast<generic_node &> (n)); }\n";
+   }
+}
+if ($ARGV[1] eq '-fwd') {
+   open my $hdr, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $hdr "#include \"refcounted.h\"\n";
+   print $hdr "struct node;\n";
+   print $hdr "typedef boost::intrusive_ptr<node> node_ptr;\n";
+   print $hdr "namespace ast {\n";
+   for my $type (keys %$ast) {
+      print $hdr "struct $type;\n";
+   }
+   print $hdr "}\n";
+}
+if ($ARGV[1] eq '-r') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "#include \"node.h\"\n";
+   print $src "char const *node_member_name (node_kind kind, size_t index) {\n";
+   print $src "  switch (kind) {\n";
+   for my $type (keys %$ast) {
+      my $KIND = uc $type;
+
+      print $src "    case NODE_$KIND:\n";
+      print $src "      switch (index) {\n";
+      for my $i (0 .. $#{ $ast->{$type} }) {
+         print $src "        case $i: return \"" . (demangle deref $ast->{$type}[$i]) . "\";\n";
+      }
+      print $src "      }\n";
+      print $src "      break;\n";
+   }
+   print $src "  case NODE_AMBIGUITY: return index == 0 ? \"a\" : \"b\";\n";
+   print $src "  }\n";
+   print $src "  return \"<invalid>\";\n";
+   print $src "}\n";
+}
+if ($ARGV[1] eq '-mli') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+print $src <<EOF;
+open Sexplib
+
+type location = {
+  first_line : int;
+  first_column : int;
+  last_line : int;
+  last_column : int;
+  file : string;
+}
+
+EOF
+   print $src "type ast\n";
+   print $src "  = Nothing\n";
+   print $src "  | Token of location * int * string\n";
+   for my $type (keys %$ast) {
+      my $Type = $type;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type of location * ", join " * ", map { "(*" . (demangle deref $_) . "*) ast" } @{ $ast->{$type} };
+      print $src "\n";
+   }
+   print $src "  ;;\n";
+   print $src "\n";
+   print $src <<EOF;
+val resume : (ast -> ast) -> ast -> ast
+EOF
+}
+if ($ARGV[1] eq '-ml') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "open Ast\n";
+   print $src "open Location\n";
+   print $src "open Sexplib\n";
+   print $src "open Sexp\n";
+   print $src "\n";
+   print $src "let resume fn expr =\n";
+   print $src "  match expr with\n";
+   print $src "    Nothing -> Nothing\n";
+   print $src "  | Token (loc, kind, lexeme) -> Token (loc, kind, lexeme)\n";
+   for my $type (keys %$ast) {
+      my $Type = $type;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type (loc, ", join ", ", map { mangle deref $_ } @{ $ast->{$type} };
+      print $src ") -> $Type (loc, ", join ", ", map { "fn " . mangle deref $_ } @{ $ast->{$type} };
+      print $src ")\n";
+   }
+   print $src "  ;;\n";
+   print $src "\n";
+
+   print $src "let rec ast_of_sexp x =\n";
+   print $src "  match x with\n";
+   for my $type (keys %$ast) {
+      my $Type = $type;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | List [Atom (\"$type\"); loc; ", (join "; ", map { mangle deref $_ } @{ $ast->{$type} }), "] ->\n";
+      print $src "      $Type (location_of_sexp loc, ", (join ", ", map { "ast_of_sexp " . mangle deref $_ } @{ $ast->{$type} }), ")\n";
+   }
+   print $src "  | List [Atom (\"token\"); Atom (kind); Atom (lexeme); loc] ->\n";
+   print $src "      Token (location_of_sexp loc, int_of_string kind, lexeme)\n";
+   print $src "  | Atom (\"NIL\") -> Nothing\n";
+   print $src "  | _ -> raise (Conv_error.no_variant_match \"ast\" x)\n";
+   print $src ";;\n";
+
+   print $src "let rec sexp_of_ast e =\n";
+   print $src "  match e with\n";
+   for my $type (keys %$ast) {
+      my $Type = $type;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type (loc, ", (join ", ", map { mangle deref $_ } @{ $ast->{$type} }), ") ->\n";
+      print $src "      List [Atom (\"$type\"); sexp_of_location loc; ", (join "; ", map { "sexp_of_ast " . mangle deref $_ } @{ $ast->{$type} }), "]\n";
+   }
+   print $src "  | Token (loc, kind, lexeme) ->\n";
+   print $src "      List [Atom (\"token\"); Atom (string_of_int kind); Atom (lexeme); sexp_of_location loc]\n";
+   print $src "  | Nothing -> Atom (\"NIL\")\n";
+   print $src ";;\n";
+}

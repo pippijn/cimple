@@ -1,0 +1,42 @@
+%{
+##include "yyparse-help.h"
+%}
+
+%define api.pure
+%locations
+%debug
+%error-verbose
+%token-table
+/*%glr-parser*/
+
+%parse-param	{ parser *self }
+%lex-param	{ parser *self }
+
+%token TK_EOF 0		"end of file"
+%token TK_ERROR		"invalid token"
+
+#include "gen/tokens.y"
+
+%start program
+%%
+#include "gen/rules-pp.y"
+
+empty
+	: /* empty */
+	  { $$ = NULL; }
+	;
+
+program
+	: translation_unit
+	  { $$ = NULL; self->unit = $1; }
+	;
+%%
+char const *
+token_name (yytokentype token)
+{
+  if (token > 255)
+    return yytname[token - 255];
+  else if (token == EOF)
+    return "<empty>";
+  return "<invalid>";
+}

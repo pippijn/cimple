@@ -1,0 +1,23 @@
+#!/usr/bin/env perl
+
+use common::sense;
+use tools::grammar::parse;
+use tools::grammar::rules;
+use tools::grammar::tree;
+
+use constant USAGE => "Usage: $0 -[ay] <rules.y> <pt.ast>";
+
+my $arg  = $ARGV[0] || die USAGE;
+my $in   = $ARGV[1] || die USAGE;
+my $out  = $ARGV[2] || die USAGE;
+
+my $rules = parse $in;
+
+open my $fh, ">", $out
+   or die "Could not open $out: $!";
+
+if ($arg eq '-y') {
+   gen_rules $rules, $fh
+} elsif ($arg eq '-a') {
+   gen_tree $rules, $fh
+}

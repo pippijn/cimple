@@ -1,0 +1,8 @@
+#include "rules/declarations.y"
+#include "rules/preproc.y"
+#include "rules/default_int.y"
+#include "rules/definitions.y"
+#include "rules/expressions.y"
+#include "rules/literals.y"
+#include "rules/statements.y"
+#include "rules/sue.y"
