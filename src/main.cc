@@ -1,14 +1,25 @@
 #include "config.h"
 
+#include <memory>
 #include <clocale>
 #include <cstdlib>
 
 #include <sys/time.h>
 
-#include "lexer.h"
+#include "clexer.h"
+#include "sxlexer.h"
 #include "parser.h"
 
 #include <valgrind/callgrind.h>
+
+node_ptr
+ast_of_sexpr (char const *file)
+{
+  sxlexer lex (file);
+  parser parse (lex);
+
+  return parse ();
+}
 
 template<size_t N>
 static int
@@ -65,31 +76,45 @@ main (int argc, char *argv[])
 
       printf ("processing %s\n", file);
 
-      char cmd[1024];
-      snprintf (cmd, sizeof cmd,
-                "gcc -xc -E -nostdinc "
-                "-Istdinc "
-                "-I../aldor/include "
-                "-I../aldor/_build "
-                "-I../aldor/_build/include "
-                "-DHAVE_CONFIG_H "
-                "-DCIMPLE "
-                "-DPKGLIBEXECDIR='\"\"' "
-                "%s", file);
+      std::auto_ptr<lexer> lex;
+      char const *ext = strrchr (file, '.');
+      if (strcmp (ext, ".c") == 0)
+        {
+          char cmd[1024];
+          snprintf (cmd, sizeof cmd,
+                    "gcc -xc -E -nostdinc "
+                    "-Istdinc "
+                    "-I../aldor/include "
+                    "-I../aldor/_build "
+                    "-I../aldor/_build/include "
+                    "-DHAVE_CONFIG_H "
+                    "-DCIMPLE "
+                    "-DPKGLIBEXECDIR='\"\"' "
+                    "%s", file);
 
-      FILE *fh = popen (cmd, "r");
-      std::string preprocessed;
-      while (!feof (fh))
-        preprocessed.append (cmd, fread (cmd, 1, sizeof cmd, fh));
-      pclose (fh);
+          FILE *fh = popen (cmd, "r");
+          std::string preprocessed;
+          while (!feof (fh))
+            preprocessed.append (cmd, fread (cmd, 1, sizeof cmd, fh));
+          pclose (fh);
 
-      bytes += preprocessed.length ();
+          bytes += preprocessed.length ();
 
 #if 0
-      fprintf (stderr, "%s\n", preprocessed.c_str ());
+          fprintf (stderr, "%s\n", preprocessed.c_str ());
 #endif
 
-      lexer lex (file, preprocessed);
+          lex.reset (new clexer (file, preprocessed));
+        }
+      else if (strcmp (ext, ".scm") == 0)
+        {
+          lex.reset (new sxlexer (file));
+        }
+      else
+        {
+          printf ("invalid extension: %s\n", ext);
+          return EXIT_FAILURE;
+        }
 #if 0
       {
         node *doc = NULL;
@@ -112,7 +137,7 @@ main (int argc, char *argv[])
       }
 #endif
 
-      parser parse (lex);
+      parser parse (*lex);
 
       CALLGRIND_START_INSTRUMENTATION;
       if (node_ptr doc = parse ())

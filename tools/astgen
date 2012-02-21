@@ -9,8 +9,9 @@ sub deref {
 }
 
 sub demangle {
-   $_[0] =~ s/_$//;
-   $_[0]
+   my $t = $_[0];
+   $t =~ s/_$//;
+   $t
 }
 
 sub mangle {
@@ -23,7 +24,7 @@ my %reserved = map { $_ => 1 } qw(
    break if typedef long goto const signed volatile else
 );
 
-for my $type (keys %$ast) {
+for my $type (sort keys %$ast) {
    for my $i (0 .. $#{ $ast->{$type} }) {
       $ast->{$type} = [map { deref $_ } @{ $ast->{$type} }];
       if ($reserved{$ast->{$type}[$i]}) {
@@ -40,7 +41,7 @@ for my $type (keys %$ast) {
 if ($ARGV[1] eq '-h') {
    open my $hdr, '>', $ARGV[2] or die "$ARGV[2]: $!";
    print $hdr "namespace ast {\n";
-   for my $type (keys %$ast) {
+   for my $type (sort keys %$ast) {
       my $args = join ", ", map { "node_ptr $_" } @{ $ast->{$type} };
       my $get = join ";\n   ", map { "node_ptr const &$_ () const" } @{ $ast->{$type} };
       my $set = join ";\n   ", map { "void $_ (node_ptr const &n)" } @{ $ast->{$type} };
@@ -76,7 +77,7 @@ if ($ARGV[1] eq '-c') {
    print $src "#include \"visitor.h\"\n";
    print $src "#include \"ast.h\"\n";
    print $src "using namespace ast;\n";
-   for my $type (keys %$ast) {
+   for my $type (sort keys %$ast) {
       my $member_count = @{ $ast->{$type} };
       my $args = join ", ", map { "node_ptr $_" } @{ $ast->{$type} };
       my $i = 0;
@@ -84,7 +85,7 @@ if ($ARGV[1] eq '-c') {
       $i = 0;
       my $set = join "\n", map { "void ${type}::$_ (node_ptr const &n) { (*this)[" . $i++ . "] = n; }" } @{ $ast->{$type} };
       my $add_nodes = join ";\n  ", map { "push ($_)" } @{ $ast->{$type} };
-      my $KIND = uc $type;
+      my $KIND = uc demangle $type;
 
       print $src <<EOF;
 node_ptr ${type}::accept (visitor &v) { return v.visit (*this); }
@@ -111,8 +112,8 @@ EOF
 }
 if ($ARGV[1] eq '-kh') {
    open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
-   for my $type (keys %$ast) {
-      my $KIND = uc $type;
+   for my $type (sort keys %$ast) {
+      my $KIND = uc demangle $type;
 
       print $src <<EOF;
 NODE_$KIND,
@@ -124,11 +125,12 @@ if ($ARGV[1] eq '-kc') {
    print $src "#include \"node.h\"\n";
    print $src "char const *node_kind_name (node_kind kind) {\n";
    print $src "  switch (kind) {\n";
-   for my $type (keys %$ast) {
+   for my $type (sort keys %$ast) {
+      $type = demangle $type;
       my $KIND = uc $type;
 
       print $src <<EOF;
-    case NODE_$KIND: return "$type";
+  case NODE_$KIND: return "$type";
 EOF
    }
    print $src "  case NODE_TOKEN: return \"token\";\n";
@@ -139,7 +141,7 @@ EOF
 }
 if ($ARGV[1] eq '-vh') {
    open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
-   for my $type (keys %$ast) {
+   for my $type (sort keys %$ast) {
       print $src "virtual node_ptr visit ($type &n) PURE;\n";
    }
 }
@@ -149,7 +151,7 @@ if ($ARGV[1] eq '-vc') {
    print $src "#include \"node.h\"\n";
    print $src "#include \"ast.h\"\n";
    print $src "using namespace ast;\n";
-   for my $type (keys %$ast) {
+   for my $type (sort keys %$ast) {
       print $src "node_ptr traverser::visit ($type &n) { return visit (static_cast<generic_node &> (n)); }\n";
    }
 }
@@ -159,7 +161,7 @@ if ($ARGV[1] eq '-fwd') {
    print $hdr "struct node;\n";
    print $hdr "typedef boost::intrusive_ptr<node> node_ptr;\n";
    print $hdr "namespace ast {\n";
-   for my $type (keys %$ast) {
+   for my $type (sort keys %$ast) {
       print $hdr "struct $type;\n";
    }
    print $hdr "}\n";
@@ -169,13 +171,13 @@ if ($ARGV[1] eq '-r') {
    print $src "#include \"node.h\"\n";
    print $src "char const *node_member_name (node_kind kind, size_t index) {\n";
    print $src "  switch (kind) {\n";
-   for my $type (keys %$ast) {
-      my $KIND = uc $type;
+   for my $type (sort keys %$ast) {
+      my $KIND = uc demangle $type;
 
       print $src "    case NODE_$KIND:\n";
       print $src "      switch (index) {\n";
       for my $i (0 .. $#{ $ast->{$type} }) {
-         print $src "        case $i: return \"" . (demangle deref $ast->{$type}[$i]) . "\";\n";
+         print $src "        case $i: return \"" . (demangle $ast->{$type}[$i]) . "\";\n";
       }
       print $src "      }\n";
       print $src "      break;\n";
@@ -189,6 +191,7 @@ if ($ARGV[1] eq '-mli') {
    open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
 print $src <<EOF;
 open Sexplib
+open Token
 
 type location = {
   first_line : int;
@@ -201,12 +204,13 @@ type location = {
 EOF
    print $src "type ast\n";
    print $src "  = Nothing\n";
-   print $src "  | Token of location * int * string\n";
-   for my $type (keys %$ast) {
-      my $Type = $type;
+   print $src "  | Token of location * token_kind * string\n";
+   print $src "  | AstList of location * ast list\n";
+   for my $type (sort keys %$ast) {
+      my $Type = demangle $type;
       $Type =~ s/^([a-z])/\u$1/;
       $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | $Type of location * ", join " * ", map { "(*" . (demangle deref $_) . "*) ast" } @{ $ast->{$type} };
+      print $src "  | $Type of location * ", join " * ", map { "(*" . (demangle $_) . "*) ast" } @{ $ast->{$type} };
       print $src "\n";
    }
    print $src "  ;;\n";
@@ -221,48 +225,142 @@ if ($ARGV[1] eq '-ml') {
    print $src "open Location\n";
    print $src "open Sexplib\n";
    print $src "open Sexp\n";
+   print $src "open Token\n";
    print $src "\n";
    print $src "let resume fn expr =\n";
    print $src "  match expr with\n";
-   print $src "    Nothing -> Nothing\n";
-   print $src "  | Token (loc, kind, lexeme) -> Token (loc, kind, lexeme)\n";
-   for my $type (keys %$ast) {
-      my $Type = $type;
+   print $src "  | Nothing -> expr\n";
+   print $src "  | Token (_, _, _) -> expr\n";
+   print $src "  | AstList (loc, l) -> AstList (loc, List.map fn l)\n";
+   for my $type (sort keys %$ast) {
+      my $Type = demangle $type;
       $Type =~ s/^([a-z])/\u$1/;
       $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | $Type (loc, ", join ", ", map { mangle deref $_ } @{ $ast->{$type} };
-      print $src ") -> $Type (loc, ", join ", ", map { "fn " . mangle deref $_ } @{ $ast->{$type} };
+      print $src "  | $Type (loc, ", join ", ", map { mangle $_ } @{ $ast->{$type} };
+      print $src ") -> $Type (loc, ", join ", ", map { "fn " . mangle $_ } @{ $ast->{$type} };
       print $src ")\n";
    }
    print $src "  ;;\n";
+
    print $src "\n";
 
    print $src "let rec ast_of_sexp x =\n";
    print $src "  match x with\n";
-   for my $type (keys %$ast) {
-      my $Type = $type;
+   print $src "  | Atom (\"NIL\") -> Nothing\n";
+   print $src "  | List [Atom (\"token\"); loc; Atom (kind); Atom (lexeme)] ->\n";
+   print $src "      Token (location_of_sexp loc, token_kind_of_string kind, lexeme)\n";
+   print $src "  | List (Atom (\"ast_list\") :: (loc :: l)) ->\n";
+   print $src "      AstList (location_of_sexp loc, List.map ast_of_sexp l)\n";
+   for my $type (sort keys %$ast) {
+      my $tname = demangle $type;
+      my $Type = $tname;
       $Type =~ s/^([a-z])/\u$1/;
       $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | List [Atom (\"$type\"); loc; ", (join "; ", map { mangle deref $_ } @{ $ast->{$type} }), "] ->\n";
-      print $src "      $Type (location_of_sexp loc, ", (join ", ", map { "ast_of_sexp " . mangle deref $_ } @{ $ast->{$type} }), ")\n";
+      print $src "  | List [Atom (\"$tname\"); loc; ", (join "; ", map { mangle $_ } @{ $ast->{$type} }), "] ->\n";
+      print $src "      $Type (location_of_sexp loc, ", (join ", ", map { "ast_of_sexp " . mangle $_ } @{ $ast->{$type} }), ")\n";
    }
-   print $src "  | List [Atom (\"token\"); Atom (kind); Atom (lexeme); loc] ->\n";
-   print $src "      Token (location_of_sexp loc, int_of_string kind, lexeme)\n";
-   print $src "  | Atom (\"NIL\") -> Nothing\n";
    print $src "  | _ -> raise (Conv_error.no_variant_match \"ast\" x)\n";
    print $src ";;\n";
 
+   print $src "\n";
+
    print $src "let rec sexp_of_ast e =\n";
    print $src "  match e with\n";
-   for my $type (keys %$ast) {
-      my $Type = $type;
+   print $src "  | Nothing -> Atom (\"NIL\")\n";
+   print $src "  | Token (loc, kind, lexeme) ->\n";
+   print $src "      List [Atom (\"token\"); sexp_of_location loc; Atom (string_of_token_kind kind); Atom (lexeme)]\n";
+   print $src "  | AstList (loc, l) ->\n";
+   print $src "      List (List.append [Atom (\"ast_list\"); sexp_of_location loc] (List.map sexp_of_ast l))\n";
+   for my $type (sort keys %$ast) {
+      my $tname = demangle $type;
+      my $Type = $tname;
       $Type =~ s/^([a-z])/\u$1/;
       $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | $Type (loc, ", (join ", ", map { mangle deref $_ } @{ $ast->{$type} }), ") ->\n";
-      print $src "      List [Atom (\"$type\"); sexp_of_location loc; ", (join "; ", map { "sexp_of_ast " . mangle deref $_ } @{ $ast->{$type} }), "]\n";
+      print $src "  | $Type (loc, ", (join ", ", map { mangle $_ } @{ $ast->{$type} }), ") ->\n";
+      print $src "      List [Atom (\"$tname\"); sexp_of_location loc; ", (join "; ", map { "sexp_of_ast " . mangle $_ } @{ $ast->{$type} }), "]\n";
    }
-   print $src "  | Token (loc, kind, lexeme) ->\n";
-   print $src "      List [Atom (\"token\"); Atom (string_of_int kind); Atom (lexeme); sexp_of_location loc]\n";
-   print $src "  | Nothing -> Atom (\"NIL\")\n";
    print $src ";;\n";
+}
+if ($ARGV[1] eq '-lex') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src <<'EOF';
+%{
+#include "sxlex-help.h"
+%}
+
+%option prefix="sx"
+%option bison-locations
+%option reentrant
+%option yylineno
+%option noyywrap nounput noinput nounistd
+%option never-interactive
+
+%%
+"("				{ Punctuation (LBRACK); }
+")"				{ Punctuation (RBRACK); }
+[0-9]+			{ Token (INTEGER_CONSTANT); }
+
+"NIL"				{ Keyword (SX_NIL); }
+"loc"				{ Keyword (SX_LOC); }
+"token"			{ Keyword (SX_TOKEN); }
+"ast_list"		{ Keyword (SX_AST_LIST); }
+
+EOF
+
+   for my $type (sort keys %$ast) {
+      $type = demangle $type;
+      my $TYPE = uc $type;
+      print $src "\"$type\"		{ Keyword (SX_$TYPE); }\n";
+   }
+}
+if ($ARGV[1] eq '-yacc') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "sx_expression\n";
+   print $src "	: \"NIL\"\n";
+   print $src "	  { \$\$ = NULL; }\n";
+   for my $type (sort keys %$ast) {
+      my $params = join " ", map { "sx_expression" } @{ $ast->{$type} };
+      my $i = 4;
+      my $args = join ", ", map { '$' . $i++ } @{ $ast->{$type} };
+      my $tname = demangle $type;
+      print $src "	| \"(\" \"sx-$tname\" sx_location $params \")\"\n";
+      print $src "	  { \$\$ = new ast::$type (\@3, $args); }\n";
+   }
+   print $src "	;\n\n";
+
+   print $src "sx_token\n";
+   print $src "	: \"NIL\"\n";
+   print $src "	  { \$\$ = NULL; }\n";
+   for ("loc", "token", "ast_list", sort keys %$ast) {
+      my $type = demangle $_;
+      my $TYPE = uc $type;
+      my $length = (length $type) + 3;
+      print $src "	| \"sx-$type\"\n";
+      print $src "	  { \$\$ = new token (\@\$, yytokentype (KW_SX_$TYPE), \"sx-$type\", $length); }\n";
+   }
+   print $src "	;\n";
+}
+if ($ARGV[1] eq '-tok') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "%token KW_SX_NIL \"NIL\"\n";
+   print $src "%token KW_SX_LOC \"sx-loc\"\n";
+   print $src "%token KW_SX_TOKEN \"sx-token\"\n";
+   print $src "%token KW_SX_AST_LIST \"sx-ast_list\"\n";
+   for my $type (sort keys %$ast) {
+      $type = demangle $type;
+      my $TYPE = uc $type;
+      print $src "%token KW_SX_$TYPE \"sx-$type\"\n";
+   }
+}
+if ($ARGV[1] eq '-shstr') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "  SHSTR (KW_SX_NIL, \"NIL\");\n";
+   print $src "  SHSTR (KW_SX_LOC, \"loc\");\n";
+   print $src "  SHSTR (KW_SX_TOKEN, \"token\");\n";
+   print $src "  SHSTR (KW_SX_AST_LIST, \"ast_list\");\n";
+   for my $type (sort keys %$ast) {
+      $type = demangle $type;
+      my $TYPE = uc $type;
+      print $src "  SHSTR (KW_SX_$TYPE, \"$type\");\n";
+   }
 }

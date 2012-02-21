@@ -39,3 +39,34 @@ yylex (YYSTYPE *yylval, YYLTYPE *yylloc, parser *self)
 {
   return self->lex.lex (yylval, yylloc);
 }
+
+static shstr
+get_shstr (node_ptr n)
+{
+  shstr s = n->as<token> ().lexeme;
+  std::string o;
+  o.reserve (s.length ());
+  for (char const *i = s.c_str (), *e = s.c_str () + s.length (); i != e; ++i)
+    switch (*i)
+      {
+      case '"':
+        break;
+      case '\\':
+        ++i;
+      default:
+        o += *i;
+      }
+  return shstr (o.data (), o.length ());
+}
+
+static char const *
+get_string (node_ptr n)
+{
+  return get_shstr (n).c_str ();
+}
+
+static int
+get_int (node_ptr n)
+{
+  return strtol (get_string (n), NULL, 10);
+}

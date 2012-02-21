@@ -16,3 +16,4 @@ struct parser;
 
 void yyerror (YYLTYPE const *llocp, parser *parse, char const *msg);
 char const *tokname (short yytoken);
+char const *token_kind_name (yytokentype kind);

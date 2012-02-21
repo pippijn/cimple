@@ -162,30 +162,6 @@ sub assemble_rules {
    $rhs . $code
 }
 
-sub gen_list {
-   my ($term) = @_;
-
-<<EOF
-${term}__list
-\t: $term
-\t  { \$\$ = make list from \$1 }
-\t| ${term}__list $term
-\t  { \$\$ = add \$2 to list \$1 }
-\t;
-EOF
-}
-
-sub gen_opt {
-   my ($term) = @_;
-
-<<EOF
-${term}__opt
-\t: empty
-\t| ${term}
-\t;
-EOF
-}
-
 sub gen_yacc_rules {
    my ($rules, $fh) = @_;
 
@@ -193,8 +169,9 @@ sub gen_yacc_rules {
       my $nodes = locate_args $rule;
 
       print $fh "$nterm\n\t: "
-              . (join "\n\t| ", map { assemble_rules $nodes, $_ } @$rule)
-              . "\n\t;\n\n\n";
+              , (join "\n\t| ", map { assemble_rules $nodes, $_ } @$rule)
+              , "\n\t;\n\n\n"
+              ;
    }
 }
 

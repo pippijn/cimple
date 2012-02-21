@@ -19,8 +19,10 @@ let location_of_sexp x =
 ;;
 
 let sexp_of_location loc =
+  (*let _ =*)
   List [Atom ("loc");
     List [Atom (string_of_int loc.first_line); Atom (string_of_int loc.first_column)];
     List [Atom (string_of_int loc.last_line); Atom (string_of_int loc.last_column)];
     Atom (loc.file)]
+  (*in Atom ("loc")*)
 ;;

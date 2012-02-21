@@ -18,6 +18,7 @@ enum node_kind
 char const *node_kind_name (node_kind kind);
 char const *node_member_name (node_kind kind, size_t index);
 
+node_ptr ast_of_sexpr (char const *file);
 
 namespace ast
 {

@@ -9,11 +9,11 @@ struct lexer
   lexer (char const *file, std::string const &s);
   ~lexer ();
 
-  yytokentype lex (node **yylval, location *yylloc);
+  virtual yytokentype lex (node **yylval, location *yylloc) = 0;
   void update_lloc (YYLTYPE *yylloc, int lineno, int column, int leng);
 
   yyscan_t yyscanner;
   char const *file;
   std::string text;
-  bool own;
+  bool const own;
 };

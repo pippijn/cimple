@@ -5,7 +5,7 @@ shstr const *shstrs;
 void
 shstr::init_shstrs ()
 {
-  static shstr strs[REDUCE_THERE];
+  static shstr strs[NUM_TOKENS];
 
 #define SHSTR(TOK, STR)	strs[TOK] = shstr (STR, sizeof STR - 1)
   SHSTR (KW_ALIGNOF, "alignof");
@@ -101,6 +101,7 @@ shstr::init_shstrs ()
   SHSTR (TK_STAR, "*");
   SHSTR (TK_STAR_EQ, "*=");
   SHSTR (TK_TILDE, "~");
+#include "gen/shstrs.h"
 #undef SHSTR
 
   shstrs = strs;

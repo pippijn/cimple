@@ -1,5 +1,3 @@
-#include "transforms.h"
-
 struct sx
   : phase
 {
@@ -11,9 +9,9 @@ struct sx
   void   indent () { indent_level += indent_step; }
   void unindent () { indent_level -= indent_step; }
 
-  sx ()
+  sx (char const *file)
     : indent_level (0)
-    , fh (fopen ("test.scm", "w"))
+    , fh (fopen (file, "w"))
   {
   }
 
@@ -21,8 +19,6 @@ struct sx
   {
     fputc ('\n', fh);
     fclose (fh);
-
-    run_transforms ("test.scm");
   }
 
   static void print (FILE *fh, location const &loc)
@@ -37,29 +33,43 @@ struct sx
 
   static void print (FILE *fh, shstr s)
   {
-    for (size_t i = 0; i < s.length (); i++)
+    size_t len = s.length ();
+    bool quoted = false;
+    std::string o;
+    o.reserve (len * 2);
+    for (size_t i = 0; i < len; i++)
       switch (char c = s[i])
         {
         case '"':
-          fputs ("\\\"", fh);
+          quoted = true;
+          o += "\\\"";
           break;
+        case '\\':
+          quoted = true;
+          o += "\\\\";
+          break;
+        case ' ':
+        case ';':
+        case '(':
+        case ')':
+          quoted = true;
         default:
-          fputc (c, fh);
+          o += c;
           break;
         }
+    if (quoted)
+      fputc ('"', fh);
+    fputs (o.c_str (), fh);
+    if (quoted)
+      fputc ('"', fh);
   }
 
-  node_ptr visit (generic_node &n)
+  void print (generic_node &n, char const *type)
   {
     if (indent_level == 0)
-      {
-        fprintf (fh, "'(%s ", type (n));
-        indent ();
-      }
+      fprintf (fh, "(%s ", type);
     else
-      {
-        fprintf (fh, "\n%*s(%s ", indent_level, "", type (n));
-      }
+      fprintf (fh, "\n%*s(%s ", indent_level, "", type);
     print (fh, n.loc);
 
     indent ();
@@ -68,6 +78,17 @@ struct sx
     unindent ();
 
     fprintf (fh, ")");
+  }
+
+  node_ptr visit (generic_node &n)
+  {
+    print (n, type (n));
+    return &n;
+  }
+
+  node_ptr visit (node_list &n)
+  {
+    print (n, "ast_list");
     return &n;
   }
 
@@ -89,10 +110,10 @@ struct sx
 
   node_ptr visit (token &n)
   {
-    fprintf (fh, "\n%*s(%s %d \"", indent_level, "", type (n), n.tok);
-    print (fh, n.lexeme);
-    fprintf (fh, "\" ");
+    fprintf (fh, "\n%*s(%s ", indent_level, "", type (n));
     print (fh, n.loc);
+    fprintf (fh, " %s ", token_kind_name (n.tok));
+    print (fh, n.lexeme);
     fprintf (fh, ")");
 
     return &n;

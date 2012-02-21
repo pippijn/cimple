@@ -2,4 +2,4 @@
 	cp $< $@
 
 transform.native: $(wildcard *.ml *.mli)
-	ocamlbuild -pkg sexplib $@
+	ocamlbuild -use-ocamlfind -pkg sexplib $@

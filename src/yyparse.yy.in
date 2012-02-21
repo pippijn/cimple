@@ -16,6 +16,10 @@
 %token TK_ERROR		"invalid token"
 
 #include "gen/tokens.y"
+#include "gen/tokens-sx.y"
+#include "gen/tokens-tok.y"
+
+%token NUM_TOKENS	"number of tokens"
 
 %start program
 %%
@@ -29,6 +33,45 @@ empty
 program
 	: translation_unit
 	  { $$ = NULL; self->unit = $1; }
+	| sx_expression
+	  { $$ = NULL; self->unit = $1; }
+	;
+
+#include "gen/rules-sx.y"
+#include "gen/rules-tok.y"
+
+sx_expression
+	: "(" "sx-ast_list" sx_location sx_expression__list ")"
+	  { ($$ = new ast::node_list (@3))->as<ast::generic_node> ().children = $4->is<ast::generic_node> ()->children; }
+	;
+
+sx_token
+	: TK_INTEGER_CONSTANT
+	| TK_STRING_LITERAL
+	;
+
+sx_expression__list
+	: sx_expression
+	  { ast::node_list &l = ($$ = new ast::node_list (@$))->as<ast::node_list> ();
+	    if ($1) l.push ($1); }
+	| sx_expression__list sx_expression
+	  { ast::node_list &l = ($$ = $1)->as<ast::node_list> ();
+	    if ($2) l.push ($2); }
+	;
+
+sx_location
+	: "(" "sx-loc"
+	    "(" TK_INTEGER_CONSTANT TK_INTEGER_CONSTANT ")"
+	    "(" TK_INTEGER_CONSTANT TK_INTEGER_CONSTANT ")"
+	    TK_STRING_LITERAL
+	  ")"
+	  {
+	    @$.first_line = get_int ($4);
+	    @$.first_column = get_int ($5);
+	    @$.last_line = get_int ($8);
+	    @$.last_column = get_int ($9);
+	    @$.file = get_string ($11);
+	  }
 	;
 %%
 char const *

@@ -20,12 +20,28 @@ phase (node_ptr unit)
   unit->accept (visitor);
 }
 
+template<typename T, typename ExtraArg>
+static void
+phase (node_ptr unit, ExtraArg arg)
+{
+  T visitor (arg);
+  unit->accept (visitor);
+}
+
 void
 compile (node_ptr unit)
 {
-  //phase<flatten_opt> (unit);
-  //phase<flatten_list> (unit);
-  phase<sx> (unit);
+  phase<flatten_opt> (unit);
+  phase<flatten_list> (unit);
+
+  puts ("writing s-expressions");
+  phase<sx> (unit, "test.scm");
+  puts ("running transforms");
+  system ("./xform > output.scm");
+  puts ("reading back s-expressions");
+  if (!(unit = ast_of_sexpr ("output.scm")))
+    return;
+
   phase<insert_syms> (unit);
   //phase<graph> (unit);
   phase<emit> (unit);
