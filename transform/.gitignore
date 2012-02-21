@@ -1,2 +1,4 @@
 /_build
+/pt.mli
+/visit.ml
 /*.native

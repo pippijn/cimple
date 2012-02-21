@@ -1,6 +1,22 @@
-open Ast
 open Sexplib
 open Sexp
+
+type location = {
+  first_line : int;
+  first_column : int;
+  last_line : int;
+  last_column : int;
+  file : string;
+}
+
+let invalid_location = { 
+  first_line = 0;
+  first_column = 0;
+  last_line = 0;
+  last_column = 0;
+  file = "<invalid>";
+}
+
 
 let location_of_sexp x =
   match x with

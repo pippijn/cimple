@@ -187,100 +187,6 @@ if ($ARGV[1] eq '-r') {
    print $src "  return \"<invalid>\";\n";
    print $src "}\n";
 }
-if ($ARGV[1] eq '-mli') {
-   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
-print $src <<EOF;
-open Sexplib
-open Token
-
-type location = {
-  first_line : int;
-  first_column : int;
-  last_line : int;
-  last_column : int;
-  file : string;
-}
-
-EOF
-   print $src "type ast\n";
-   print $src "  = Nothing\n";
-   print $src "  | Token of location * token_kind * string\n";
-   print $src "  | AstList of location * ast list\n";
-   for my $type (sort keys %$ast) {
-      my $Type = demangle $type;
-      $Type =~ s/^([a-z])/\u$1/;
-      $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | $Type of location * ", join " * ", map { "(*" . (demangle $_) . "*) ast" } @{ $ast->{$type} };
-      print $src "\n";
-   }
-   print $src "  ;;\n";
-   print $src "\n";
-   print $src <<EOF;
-val resume : (ast -> ast) -> ast -> ast
-EOF
-}
-if ($ARGV[1] eq '-ml') {
-   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
-   print $src "open Ast\n";
-   print $src "open Location\n";
-   print $src "open Sexplib\n";
-   print $src "open Sexp\n";
-   print $src "open Token\n";
-   print $src "\n";
-   print $src "let resume fn expr =\n";
-   print $src "  match expr with\n";
-   print $src "  | Nothing -> expr\n";
-   print $src "  | Token (_, _, _) -> expr\n";
-   print $src "  | AstList (loc, l) -> AstList (loc, List.map fn l)\n";
-   for my $type (sort keys %$ast) {
-      my $Type = demangle $type;
-      $Type =~ s/^([a-z])/\u$1/;
-      $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | $Type (loc, ", join ", ", map { mangle $_ } @{ $ast->{$type} };
-      print $src ") -> $Type (loc, ", join ", ", map { "fn " . mangle $_ } @{ $ast->{$type} };
-      print $src ")\n";
-   }
-   print $src "  ;;\n";
-
-   print $src "\n";
-
-   print $src "let rec ast_of_sexp x =\n";
-   print $src "  match x with\n";
-   print $src "  | Atom (\"NIL\") -> Nothing\n";
-   print $src "  | List [Atom (\"token\"); loc; Atom (kind); Atom (lexeme)] ->\n";
-   print $src "      Token (location_of_sexp loc, token_kind_of_string kind, lexeme)\n";
-   print $src "  | List (Atom (\"ast_list\") :: (loc :: l)) ->\n";
-   print $src "      AstList (location_of_sexp loc, List.map ast_of_sexp l)\n";
-   for my $type (sort keys %$ast) {
-      my $tname = demangle $type;
-      my $Type = $tname;
-      $Type =~ s/^([a-z])/\u$1/;
-      $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | List [Atom (\"$tname\"); loc; ", (join "; ", map { mangle $_ } @{ $ast->{$type} }), "] ->\n";
-      print $src "      $Type (location_of_sexp loc, ", (join ", ", map { "ast_of_sexp " . mangle $_ } @{ $ast->{$type} }), ")\n";
-   }
-   print $src "  | _ -> raise (Conv_error.no_variant_match \"ast\" x)\n";
-   print $src ";;\n";
-
-   print $src "\n";
-
-   print $src "let rec sexp_of_ast e =\n";
-   print $src "  match e with\n";
-   print $src "  | Nothing -> Atom (\"NIL\")\n";
-   print $src "  | Token (loc, kind, lexeme) ->\n";
-   print $src "      List [Atom (\"token\"); sexp_of_location loc; Atom (string_of_token_kind kind); Atom (lexeme)]\n";
-   print $src "  | AstList (loc, l) ->\n";
-   print $src "      List (List.append [Atom (\"ast_list\"); sexp_of_location loc] (List.map sexp_of_ast l))\n";
-   for my $type (sort keys %$ast) {
-      my $tname = demangle $type;
-      my $Type = $tname;
-      $Type =~ s/^([a-z])/\u$1/;
-      $Type =~ s/_([a-z])/\u$1/g;
-      print $src "  | $Type (loc, ", (join ", ", map { mangle $_ } @{ $ast->{$type} }), ") ->\n";
-      print $src "      List [Atom (\"$tname\"); sexp_of_location loc; ", (join "; ", map { "sexp_of_ast " . mangle $_ } @{ $ast->{$type} }), "]\n";
-   }
-   print $src ";;\n";
-}
 if ($ARGV[1] eq '-lex') {
    open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
    print $src <<'EOF';
@@ -363,4 +269,107 @@ if ($ARGV[1] eq '-shstr') {
       my $TYPE = uc $type;
       print $src "  SHSTR (KW_SX_$TYPE, \"$type\");\n";
    }
+}
+
+delete $ast->{node_list};
+delete $ast->{node_opt};
+if ($ARGV[1] eq '-mli') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+print $src <<EOF;
+open Sexplib
+open Location
+open Token
+
+EOF
+   print $src "type t\n";
+   print $src "  = Nothing\n";
+   print $src "  | Token of location * token_kind * string\n";
+   print $src "  | NodeList of location * t list\n";
+   for my $type (sort keys %$ast) {
+      my $Type = demangle $type;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type of location * ", join " * ", map { "(*" . (demangle $_) . "*) t" } @{ $ast->{$type} };
+      print $src "\n";
+   }
+   print $src "  ;;\n";
+   print $src "\n";
+}
+if ($ARGV[1] eq '-ml') {
+   open my $src, '>', $ARGV[2] or die "$ARGV[2]: $!";
+   print $src "open Pt\n";
+   print $src "open Location\n";
+   print $src "open Sexplib\n";
+   print $src "open Sexp\n";
+   print $src "open Token\n";
+   print $src "\n";
+   print $src "let resume fn expr =\n";
+   print $src "  match expr with\n";
+   print $src "  | Nothing -> expr\n";
+   print $src "  | Token (_, _, _) -> expr\n";
+   print $src "  | NodeList (loc, l) -> NodeList (loc, List.map fn l)\n";
+   for my $type (sort keys %$ast) {
+      my $Type = demangle $type;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type (loc, ", join ", ", map { mangle $_ } @{ $ast->{$type} };
+      print $src ") -> $Type (loc, ", join ", ", map { "fn " . mangle $_ } @{ $ast->{$type} };
+      print $src ")\n";
+   }
+   print $src "  ;;\n";
+
+   print $src "\n";
+
+   print $src "let rec pt_of_sexp x =\n";
+   print $src "  match x with\n";
+   print $src "  | Atom (\"NIL\") -> Nothing\n";
+   print $src "  | List [Atom (\"token\"); loc; Atom (kind); Atom (lexeme)] ->\n";
+   print $src "      Token (location_of_sexp loc, token_kind_of_string kind, lexeme)\n";
+   print $src "  | List (Atom (\"ast_list\") :: (loc :: l)) ->\n";
+   print $src "      NodeList (location_of_sexp loc, List.map pt_of_sexp l)\n";
+   for my $type (sort keys %$ast) {
+      my $tname = demangle $type;
+      my $Type = $tname;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | List [Atom (\"$tname\"); loc; ", (join "; ", map { mangle $_ } @{ $ast->{$type} }), "] ->\n";
+      print $src "      $Type (location_of_sexp loc, ", (join ", ", map { "pt_of_sexp " . mangle $_ } @{ $ast->{$type} }), ")\n";
+   }
+   print $src "  | _ -> raise (Conv_error.no_variant_match \"pt\" x)\n";
+   print $src ";;\n";
+
+   print $src "\n";
+
+   print $src "let rec sexp_of_pt e =\n";
+   print $src "  match e with\n";
+   print $src "  | Nothing -> Atom (\"NIL\")\n";
+   print $src "  | Token (loc, kind, lexeme) ->\n";
+   print $src "      List [Atom (\"token\"); sexp_of_location loc; Atom (string_of_token_kind kind); Atom (lexeme)]\n";
+   print $src "  | NodeList (loc, l) ->\n";
+   print $src "      List (List.append [Atom (\"ast_list\"); sexp_of_location loc] (List.map sexp_of_pt l))\n";
+   for my $type (sort keys %$ast) {
+      my $tname = demangle $type;
+      my $Type = $tname;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type (loc, ", (join ", ", map { mangle $_ } @{ $ast->{$type} }), ") ->\n";
+      print $src "      List [Atom (\"$tname\"); sexp_of_location loc; ", (join "; ", map { "sexp_of_pt " . mangle $_ } @{ $ast->{$type} }), "]\n";
+   }
+   print $src ";;\n";
+
+   print $src "\n";
+
+   print $src "let location e =\n";
+   print $src "  match e with\n";
+   print $src "  | Nothing -> raise (Failure \"Nothing has no location\")\n";
+   print $src "  | Token (loc, _, _) -> loc\n";
+   print $src "  | NodeList (loc, _) -> loc\n";
+   for my $type (sort keys %$ast) {
+      my $tname = demangle $type;
+      my $Type = $tname;
+      $Type =~ s/^([a-z])/\u$1/;
+      $Type =~ s/_([a-z])/\u$1/g;
+      print $src "  | $Type (loc, ", (join ", ", map { "_" } @{ $ast->{$type} }), ") -> loc\n";
+   }
+   print $src ";;\n";
 }

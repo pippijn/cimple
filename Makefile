@@ -132,11 +132,11 @@ src/sxlex.ll: src/gen/c.ast src/gen/yyparse.hh tools/astgen
 		echo "\"$$i\"		{ Keyword (SX_$$i); }" >> $@;	\
 	done
 	@echo '\\"(\\\\.|[^\\\\"])*\\"	{ Token (STRING_LITERAL); }' >> $@
-	@echo '[^() \\n;]+		{ Token (STRING_LITERAL); }' >> $@
+	@echo '[^() "\\n;]+		{ Token (STRING_LITERAL); }' >> $@
 	@echo '[ \\n]			{ }' >> $@
 	@echo '.				{ Token (ERROR); }' >> $@
 
-transform/ast.mli: src/gen/c.ast tools/astgen
+transform/pt.mli: src/gen/c.ast tools/astgen
 	@tools/astgen $< -mli $@
 
 transform/token.ml: src/gen/yyparse.hh
@@ -189,7 +189,7 @@ init: src/gen/ast.h
 init: src/gen/node_kind.h
 init: src/gen/forward.h
 init: src/gen/visitor_methods.h
-init: transform/ast.mli
+init: transform/pt.mli
 init: transform/token.ml
 init: transform/visit.ml
 init: src/gen/rules-tok.y

@@ -332,6 +332,6 @@
 "TK_WCHAR_CONSTANT"		{ Keyword (SX_TK_WCHAR_CONSTANT); }
 "TK_WSTRING_LITERAL"		{ Keyword (SX_TK_WSTRING_LITERAL); }
 \"(\\.|[^\\"])*\"	{ Token (STRING_LITERAL); }
-[^() \n;]+		{ Token (STRING_LITERAL); }
+[^() "\n;]+		{ Token (STRING_LITERAL); }
 [ \n]			{ }
 .				{ Token (ERROR); }
