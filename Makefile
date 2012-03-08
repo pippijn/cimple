@@ -22,7 +22,7 @@ SOURCES :=			\
 OBJECTS := $(patsubst src/%,obj/%.o,$(basename $(SOURCES)))
 
 CPPFLAGS := -MD -Isrc -Isrc/gen
-CXXFLAGS := -O0 -ggdb3 #-fopenmp
+CXXFLAGS := -O3 -ggdb3 #-fopenmp
 
 all: cimple xform
 
@@ -31,38 +31,42 @@ xform:
 	@$(MAKE) -C transform
 
 cimple: $(OBJECTS)
+	@echo "  LD   " $@
 	@$(LINK.cc) -o $@ $^
 
 obj/%.o: src/%.c
-	@echo "  CC   " $<
+	@echo "  CC   " $@
 	@$(COMPILE.c) -o $@ $<
 
 obj/%.o: src/%.cc
-	@echo "  CXX  " $<
+	@echo "  CXX  " $@
 	@$(COMPILE.cc) -o $@ $<
 
 src/gen/%.hh: src/gen/%.cc ;
 
 src/gen/%.cc: src/%.yy
-	@echo "  YACC " $<
+	@echo "  YACC " $@
 	@bison -d -o $@ $<
 
 src/gen/%.cc: src/%.ll
-	@echo "  LEX  " $<
+	@echo "  LEX  " $@
 	@flex --header-file=$(@:.cc=.h.tmp) -o$@ $<
 	@grep -v '^#line' $(@:.cc=.h.tmp) > $(@:.cc=.h.new)
 	@(diff $(@:.cc=.h) $(@:.cc=.h.new) || mv $(@:.cc=.h.new) $(@:.cc=.h)) > /dev/null 2>&1
 	@rm -f $(@:.cc=.h).*
 
 src/gen/%.y: src/grammar/%.h $(shell find src/grammar -name "*.y")
-	mkdir -p $(@D)
-	$(CPP) $(YCPPFLAGS) -P -xc $< -o $@
-	sed -i -e 's/^%[%{}]//' $@
+	@echo "  GEN  " $@
+	@mkdir -p $(@D)
+	@$(CPP) $(YCPPFLAGS) -P -xc $< -o $@
+	@sed -i -e 's/^%[%{}]//' $@
 
 src/gen/c.ast: src/gen/rules.y $(wildcard tools/grammar/*)
-	tools/grammar/gpp -a $< $@
+	@echo "  GEN  " $@
+	@tools/grammar/gpp -a $< $@
 
 src/gen/token_kind.cc: src/gen/yyparse.hh
+	@echo "  GEN  " $@
 	@echo '#include "yyparse.hh"' > $@
 	@echo 'char const *token_kind_name (yytokentype kind) {' >> $@
 	@echo '  switch (kind) {' >> $@
@@ -74,6 +78,7 @@ src/gen/token_kind.cc: src/gen/yyparse.hh
 	@echo '}' >> $@
 
 src/gen/rules-tok.y: src/gen/yyparse.hh
+	@echo "  GEN  " $@
 	@rm -f $@
 	@for i in $(shell egrep -o '\b(TK_|KW_)\w+' $< | grep -v 'KW_SX_' | sort -u); do	\
 		echo "sx_expression: \"(\" \"sx-token\" sx_location \"$$i\" sx_token \")\"" >> $@;	\
@@ -87,6 +92,7 @@ src/gen/rules-tok.y: src/gen/yyparse.hh
 	@touch src/yyparse.yy.in
 
 src/gen/tokens-tok.y: src/gen/yyparse.hh
+	@echo "  GEN  " $@
 	@rm -f $@
 	@for i in $(shell egrep -o '\b(TK_|KW_)\w+' $< | grep -v 'KW_SX_' | sort -u); do	\
 		echo "%token KW_SX_$$i \"$$i\"" >> $@;	\
@@ -94,39 +100,51 @@ src/gen/tokens-tok.y: src/gen/yyparse.hh
 	@touch src/yyparse.yy.in
 
 src/gen/node_kind.h: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -kh $@
 
 src/gen/node_kind.cc: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -kc $@
 
 src/gen/forward.h: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -fwd $@
 
 src/gen/visitor_methods.h: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -vh $@
 
 src/gen/traverser.cc: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -vc $@
 
 src/gen/members.cc: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -r $@
 
 src/gen/ast.h: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -h $@
 
 src/gen/ast.cc: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -c $@
 
 src/gen/rules-sx.y: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -yacc $@
 
 src/gen/tokens-sx.y: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -tok $@
 
 src/gen/shstrs.h: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -shstr $@
 
 src/sxlex.ll: src/gen/c.ast src/gen/yyparse.hh tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -lex $@
 	@for i in $(shell egrep -o '\b(TK_|KW_)\w+' src/gen/yyparse.hh | grep -v 'KW_SX_' | sort -u); do	\
 		echo "\"$$i\"		{ Keyword (SX_$$i); }" >> $@;	\
@@ -137,9 +155,11 @@ src/sxlex.ll: src/gen/c.ast src/gen/yyparse.hh tools/astgen
 	@echo '.				{ Token (ERROR); }' >> $@
 
 transform/pt.mli: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -mli $@
 
 transform/token.ml: src/gen/yyparse.hh
+	@echo "  GEN  " $@
 	@echo 'type token_kind =' > $@
 	@for i in $(shell egrep -o '\b(TK_|KW_)\w+' $< | grep -v 'KW_SX_' | sort -u); do	\
 		echo "  | $$i" >> $@;	\
@@ -161,9 +181,11 @@ transform/token.ml: src/gen/yyparse.hh
 	@echo ';;' >> $@
 
 transform/visit.ml: src/gen/c.ast tools/astgen
+	@echo "  GEN  " $@
 	@tools/astgen $< -ml $@
 
 src/gen/%-pp.y: src/gen/%.y $(wildcard tools/grammar/*)
+	@echo "  GEN  " $@
 	@tools/grammar/gpp -y $< $@
 
 YFILES =			\
@@ -173,6 +195,7 @@ YFILES =			\
 	src/gen/tokens-sx.y
 
 src/yyparse.yy: src/yyparse.yy.in $(YFILES)
+	@echo "  GEN  " $@
 	@$(CPP) $(YCPPFLAGS) -P -xc $< -o $@
 	@sed -i -e 's/^##/#/' $@
 
@@ -197,6 +220,6 @@ init: src/gen/tokens-tok.y
 
 -include obj/*.d obj/gen/*.d
 
-check: cimple $(shell find ../aldor/include/aldor ../aldor/src/compiler -name "*.[ch]")
+check: cimple $(shell find ../aldor/src/compiler -name "*.c")
 	@echo "running $< on all aldor sources"
 	@./$^

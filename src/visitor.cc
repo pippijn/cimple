@@ -31,6 +31,7 @@ phase (node_ptr unit, ExtraArg arg)
 void
 compile (node_ptr unit)
 {
+  return;
   phase<flatten_opt> (unit);
   phase<flatten_list> (unit);
 

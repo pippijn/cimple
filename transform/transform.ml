@@ -12,6 +12,13 @@ let mk_bracket loc e =
     Token (loc, TK_RBRACK, ")"))
 ;;
 
+let mk_braced loc e =
+  CompoundStatement (loc,
+    Token (loc, TK_LBRACE, "{"),
+    e,
+    Token (loc, TK_RBRACE, "}"))
+;;
+
 let mk_deref loc e =
   PointerDereference (loc, Token (loc, TK_STAR, "*"), e)
 ;;
@@ -21,7 +28,13 @@ let mk_add loc a b =
 ;;
 
 let rec desugar e =
+  let maybe_braced e =
+    match e with
+    | CompoundStatement (_, _, _, _) -> e
+    | e -> mk_braced (location e) e
+  in
   match e with
+
   (* a->b => ( *a ).b *)
   | PointerAccess (loc, lhs, op, member) ->
       StructAccess (loc,
@@ -30,28 +43,26 @@ let rec desugar e =
             desugar lhs)),
         Token (loc, TK_PERIOD, "."),
         member)
+
   (* a[b] => ( *(a + b) ) *)
   | ArrayAccess (loc, lhs, lsqbrack, rhs, rsqbrack) ->
       mk_bracket loc (
         mk_deref loc (
           mk_bracket loc (
             mk_add loc (desugar lhs) (desugar rhs))))
+
+  (* add explicit braces around for/while/if/do bodies *)
+  | IfStatement (loc, if_, lbrack, cond, rbrack, then_stmt, else_, else_stmt) ->
+      IfStatement (loc, if_, lbrack, cond, rbrack,
+      	maybe_braced (desugar then_stmt),
+        else_,
+        maybe_braced (desugar else_stmt))
+  | ForStatement (loc, for_, lbrack, init, init_semi, cond, cond_semi, inc, rbrack, stmt) ->
+      ForStatement (loc, for_, lbrack, init, init_semi, cond, cond_semi, inc, rbrack,
+      	maybe_braced (desugar stmt))
+
+  (* other *)
   | e -> resume desugar e
-;;
-
-(* removes *all* casts, this is just for demonstration
- * purposes, not actually useful *)
-let rec remove_casts e =
-  match e with
-  | TypeCast (loc, _, _, _, expr) -> remove_casts expr
-  | e -> resume remove_casts e
-;;
-
-(* removes all brackets, so we can re-add them where required, later *)
-let rec remove_brackets e =
-  match e with
-  | BracketExpression (loc, _, expr, _) -> remove_brackets expr
-  | expr -> resume remove_brackets expr
 ;;
 
 let main =
@@ -59,8 +70,6 @@ let main =
   let code = pt_of_sexp sexp in
 
   let code = desugar code in
-  let code = remove_casts code in
-  let code = remove_brackets code in
 
   let sexp = sexp_of_pt code in
   let _ = output_mach stdout sexp in

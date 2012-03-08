@@ -58,11 +58,14 @@ main (int argc, char *argv[])
   timeval start;
   gettimeofday (&start, NULL);
 
+  std::string preprocessed;
   size_t bytes = 0;
   for (int i = 1; i < argc; i++)
     {
       char const *file = argv[i];
 
+      if (strncmp (file, "../aldor/src/compiler/port/") == 0)
+        continue;
       if (strncmp (file, "../aldor/src/compiler/struct/fint/") == 0)
         continue;
       if (strcmp (file, "../aldor/src/compiler/phases/gencpp.c") == 0)
@@ -82,7 +85,7 @@ main (int argc, char *argv[])
         {
           char cmd[1024];
           snprintf (cmd, sizeof cmd,
-                    "gcc -xc -E -nostdinc "
+                    "/usr/bin/gcc -E -nostdinc "
                     "-Istdinc "
                     "-I../aldor/include "
                     "-I../aldor/_build "
@@ -93,7 +96,7 @@ main (int argc, char *argv[])
                     "%s", file);
 
           FILE *fh = popen (cmd, "r");
-          std::string preprocessed;
+          preprocessed.clear ();
           while (!feof (fh))
             preprocessed.append (cmd, fread (cmd, 1, sizeof cmd, fh));
           pclose (fh);
@@ -119,7 +122,7 @@ main (int argc, char *argv[])
       {
         node *doc = NULL;
         location loc;
-        while (int tok = lex.lex (&doc, &loc))
+        while (int tok = lex->lex (&doc, &loc))
           {
 #if 0
             printf ("%s\n", token_name (tok));
